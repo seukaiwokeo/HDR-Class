@@ -74,9 +74,9 @@ void HDRPacker::Pack()
 {
 	vector<KoFile> files;
 	// import the .uif and .dxt files in the UI folder and push back to the vector
-	std::string pattern("UI"));
+	std::string pattern("UI");
 	std::string base = pattern;
-	pattern.append("\\*.uif"));
+	pattern.append("\\*.uif");
 	WIN32_FIND_DATAA data;
 	HANDLE hFind;
 	if ((hFind = FindFirstFileA(pattern.c_str(), &data)) != INVALID_HANDLE_VALUE) {
@@ -136,7 +136,7 @@ void HDRPacker::Pack()
 		DWORD find = FindPattern(basename(file.Name));
 		if (find != NULL && !firstCreation) // if it does, update it's information.
 		{
-			fp = fopen("UI\\ui.hdr"), "r+b");
+			fp = fopen("UI\\ui.hdr", "r+b");
 			fseek(fp, find + file.Name.size() - 3, SEEK_SET);
 			fwrite(&startOffset, sizeof(startOffset), 1, fp);
 			fseek(fp, find + file.Name.size() + 1 , SEEK_SET);
