@@ -1,59 +1,58 @@
 #include "hdr.h"
 
+bool is_file_exist(const char* fileName)
+{
+    std::ifstream infile(fileName);
+    return infile.good();
+}
+
 HDRPacker::HDRPacker()
 {
-
+	m_hdr = NULL;
+	m_hdrSize = 0;
 }
 
 HDRPacker::~HDRPacker()
 {
-
+	m_hdr = NULL;
+	m_hdrSize = 0;
 }
 
-uint32 GetFileSize(std::string filename)
+uint32 HDRPacker::GetFileSize(std::string filename)
 {
 	struct stat stat_buf;
 	int rc = stat(filename.c_str(), &stat_buf);
 	return rc == 0 ? stat_buf.st_size : 0;
 }
 
-std::string basename(const std::string& filename)
-{
-	if (filename.empty()) {
-		return {};
+std::string ReplaceString(std::string subject, const std::string& search,
+	const std::string& replace) {
+	size_t pos = 0;
+	while ((pos = subject.find(search, pos)) != std::string::npos) {
+		subject.replace(pos, search.length(), replace);
+		pos += replace.length();
 	}
-
-	auto len = filename.length();
-	auto index = filename.find_last_of("/\\");
-
-	if (index == std::string::npos) {
-		return filename;
-	}
-
-	if (index + 1 >= len) {
-
-		len--;
-		index = filename.substr(0, len).find_last_of("/\\");
-
-		if (len == 0) {
-			return filename;
-		}
-
-		if (index == 0) {
-			return filename.substr(1, len - 1);
-		}
-
-		if (index == std::string::npos) {
-			return filename.substr(0, len);
-		}
-
-		return filename.substr(index + 1, len - index - 1);
-	}
-
-	return filename.substr(index + 1, len - index);
+	return subject;
 }
 
-static char* ReadAllBytes(const char* filename, int* read)
+DWORD HDRPacker::FindPatternEx(char* mem, size_t size, std::string search)
+{
+	char* pattern = (char*)search.c_str();
+	uint32 mask = search.length();
+	if (mask > size) return NULL;
+	for (size_t i = 0; i < size; i++)
+	{
+		bool found = true;
+		for (int j = 0; j < mask; j++)
+			if (tolower(mem[i + j]) != tolower(pattern[j]))
+				found = false;
+		if (found)
+			return i;
+	}
+	return NULL;
+}
+
+char* HDRPacker::ReadAllBytes(const char* filename, size_t* read)
 {
 	ifstream ifs(filename, ios::binary | ios::ate);
 	ifstream::pos_type pos = ifs.tellg();
@@ -66,182 +65,297 @@ static char* ReadAllBytes(const char* filename, int* read)
 	return pChars;
 }
 
-static bool startsWith(const string& s, const string& prefix) {
-	return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+std::string HDRPacker::RemoveBasePath(const std::string& filename)
+{
+	size_t found;
+	found = filename.find_first_of("\\");
+	std::string tmp = filename.substr(found+1, filename.length());
+	return ReplaceString(tmp, "/", "\\");
+}
+
+bool HDRPacker::GetAllFiles(const char* sDir)
+{
+	WIN32_FIND_DATA fdFile;
+	HANDLE hFind = NULL;
+	char sPath[2048];
+	sprintf(sPath, "%s\\*.*", sDir);
+
+	if ((hFind = FindFirstFile(sPath, &fdFile)) == INVALID_HANDLE_VALUE)
+	{
+		printf("Path not found: [%s]\n", sDir);
+		return false;
+	}
+	do
+	{
+		if (strcmp(fdFile.cFileName, ".") != 0 && strcmp(fdFile.cFileName, "..") != 0)
+		{
+			sprintf(sPath, "%s\\%s", sDir, fdFile.cFileName);
+			if (fdFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				GetAllFiles(sPath);
+			if (string(fdFile.cFileName).find(xorstr(".hdr")) == string::npos && string(fdFile.cFileName).find(xorstr(".src")) == string::npos && string(fdFile.cFileName).find(xorstr(".")) != string::npos && string(fdFile.cFileName) != xorstr(".") && string(fdFile.cFileName) != xorstr("..")) {
+				files.push_back(KoFile(string(sPath), fdFile.nFileSizeLow));
+			}
+		}
+	} while (FindNextFile(hFind, &fdFile));
+
+	FindClose(hFind);
+	return true;
+}
+
+void HDRPacker::CheckHDR(std::string path)
+{
+	if (!is_file_exist(path.c_str()))
+	{
+		CreateDirectory("UI", NULL);
+		CreateDirectory("Object", NULL);
+		CreateDirectory("Item", NULL);
+		ofstream hdr(path.c_str());
+		hdr.close();
+		FILE* fp = fopen(path.c_str(), "r+b");
+		fseek(fp, 0, SEEK_SET);
+		int defaultSize = 0;
+		fwrite(&defaultSize, 4, 1, fp);
+		fclose(fp);
+	}
 }
 
 void HDRPacker::Pack()
 {
-	vector<KoFile> files;
-	// import the .uif and .dxt files in the UI folder and push back to the vector
-	std::string pattern("UI");
-	std::string base = pattern;
-	pattern.append("\\*.uif");
-	WIN32_FIND_DATAA data;
-	HANDLE hFind;
-	if ((hFind = FindFirstFileA(pattern.c_str(), &data)) != INVALID_HANDLE_VALUE) {
-		do {
-			files.push_back(KoFile(string(base + "/" + data.cFileName), GetFileSize(base + "\\" + data.cFileName)));
-		} while (FindNextFileA(hFind, &data) != 0);
-		FindClose(hFind);
-	}
-
-	pattern = "UI";
-	base = pattern;
-	pattern.append("\\*.dxt");
-	ZeroMemory(&data, sizeof(data));
-	hFind = NULL;
-	if ((hFind = FindFirstFileA(pattern.c_str(), &data)) != INVALID_HANDLE_VALUE) {
-		do {
-			files.push_back(KoFile(string(base + "/" + data.cFileName), GetFileSize(string(base + "\\" + data.cFileName))));
-		} while (FindNextFileA(hFind, &data) != 0);
-		FindClose(hFind);
-	}
-
+	CheckHDR(xorstr("UI\\ui.hdr"));
+	GetAllFiles("UI");
 	if (files.size() == 0)
 		return;
 
-	bool firstCreation = false;
-	// update the new file count in hdr
-	uint32 fCount = 0;
-	uint32 nCount;
-	FILE* fp = fopen("UI\\ui.hdr", "r+b");
-	if (fp != nullptr) {
-		fseek(fp, 0, SEEK_SET);
-		fread(&fCount, sizeof(fCount), 1, fp); // get total file count in hdr
-		nCount = fCount + files.size(); // set the new one
-		fseek(fp, 0, SEEK_SET);
-		fwrite(&nCount, sizeof(nCount), 1, fp); // write it
-		fclose(fp);
-	}
-	else {
-		std::ofstream createHDR("UI\\ui.hdr");
-		createHDR.close();
-		nCount = files.size();
-		fp = fopen("UI\\ui.hdr", "r+b");
-		fwrite(&nCount, sizeof(nCount), 1, fp); // write the file count
-		fclose(fp);
-		firstCreation = true;
-	}
-
-	// packaging the files in vector
-	uint32 updateCount = 0;
-	int itr = 1;
+	uint32 fCount = 0, nCount = 0, itr = 1;
+	m_hdr = ReadAllBytes(xorstr("UI\\ui.hdr"), &m_hdrSize);
+	memcpy(&fCount, &m_hdr[0], 4);
+	FILE* fp = fopen(xorstr("UI\\ui.hdr"), "r+b");
+	int startOffset = GetFileSize(string(xorstr("UI\\ui.src")));
+	int SizeInBytes = 0;
 	for (KoFile file : files)
 	{
-		// ----------- add informations to hdr
-		uint32 startOffset = GetFileSize(string("UI\\ui.src"))); // get the last address of src
-		uint32 SizeInBytes = file.Size;
-		// does the file already exist in hdr?
-		DWORD find = FindPattern(basename(file.Name));
-		if (find != NULL && !firstCreation) // if it does, update it's information.
+		Engine->SetState(string_format(xorstr("---> [%s]"), file.Name.c_str()));
+		Engine->SetPercent(round(itr * 100 / files.size()));
+		SizeInBytes = file.Size;
+		std::string origName = RemoveBasePath(file.Name);
+		DWORD find = FindPatternEx(m_hdr, m_hdrSize, origName);
+		if (find != NULL)
 		{
-			fp = fopen("UI\\ui.hdr", "r+b");
-			fseek(fp, find + file.Name.size() - 3, SEEK_SET);
+			fseek(fp, find + origName.length(), SEEK_SET);
+			fwrite(&startOffset, 4, 1, fp);
+			fseek(fp, find + origName.length() + 4, SEEK_SET);
+			fwrite(&SizeInBytes, 4, 1, fp);
+		}
+		else {
+			size_t nameLen = origName.length();
+			char* name = (char*)malloc(sizeof(char) * nameLen);
+
+			name = (char*)origName.c_str();
+			fseek(fp, 0, SEEK_END);
+			fwrite(&nameLen, 4, 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(name, sizeof(char), nameLen, fp);
+			fseek(fp, 0, SEEK_END);
 			fwrite(&startOffset, sizeof(startOffset), 1, fp);
-			fseek(fp, find + file.Name.size() + 1 , SEEK_SET);
+			fseek(fp, 0, SEEK_END);
 			fwrite(&SizeInBytes, sizeof(SizeInBytes), 1, fp);
-			fclose(fp);
-			updateCount++;
+			nCount++;
 		}
-		else { // if it doesn't, insert it
-			ByteBuffer buff;
-			buff << basename(file.Name) << startOffset << SizeInBytes;
-			std::ofstream hdr("UI\\ui.hdr"), ios::binary | ios::app);
-			hdr.write((char*)buff.contents(), buff.size());
-			hdr.close();
-		}
-		// ----------- insert the data into src
-		std::ofstream src("UI\\ui.src"), ios::binary | ios::app);
+		std::ofstream src(xorstr("UI\\ui.src"), ios::binary | ios::app);
 		std::ifstream _koFile(file.Name.c_str(), std::ios::binary);
 		src << _koFile.rdbuf();
 		src.close();
 		_koFile.close();
-		// remove file
 		std::remove(file.Name.c_str());
+		startOffset += SizeInBytes;
 		itr++;
 	}
-
-	if (updateCount > 0) // if is there any file which has been updated, decrase the file count incrased before from hdr because we didn't insert them. we updated.
+	if (nCount > 0)
 	{
-		if (fopen("UI\\ui.hdr", "r+b"))
-		{
-			uint32 currentFileCount;
-			fseek(fp, 0x0, SEEK_SET);
-			fread(&currentFileCount, sizeof(currentFileCount), 1, fp);
-			currentFileCount -= updateCount;
-			fseek(fp, 0x0, SEEK_SET);
-			fwrite(&currentFileCount, sizeof(currentFileCount), 1, fp);
-			fclose(fp);
-		}
-	}
-}
-
-
-DWORD HDRPacker::FindPattern(std::string fileName)
-{
-	int memSize;
-	char* memory = ReadAllBytes("UI\\ui.hdr"), &memSize);
-
-	char* pattern = (char*)fileName.c_str();
-	uint32 mask = strlen(pattern);
-	if (mask > memSize) return NULL;
-
-	for (int i = 0; i < memSize; i++)
-	{
-		bool found = true;
-		for (int j = 0; j < mask; j++)
-			if (memory[i + j] != pattern[j])
-				found = false;
-		if (found)
-			return i;
-	}
-
-	return NULL;
-}
-
-void HDRPacker::Unpack()
-{
-	vector<HDR> files;
-	uint32 totalFile = 0;
-
-	ByteBuffer content;
-	BYTE buf;
-	FILE* fp = fopen("UI\\ui.hdr", "rb");
-	while (fread(&buf, sizeof(BYTE), 1, fp) == 1)
-	{
-		content.append(buf);
+		fCount += nCount;
+		fseek(fp, 0x0, SEEK_SET);
+		fwrite(&fCount, 4, 1, fp);
 	}
 	fclose(fp);
+	files.clear();
+}
 
-	// HDR files into vector
-	content >> totalFile;
-	for (uint32 i = 0; i < totalFile; i++) {
-		HDR hdr;
-		int32 nameLen;
-		content >> nameLen;
-		BYTE* name = new BYTE[nameLen];
-		for (uint32 j = 0; j < nameLen; j++)
-			content >> name[j];
-		hdr.Name = (char*)name;
-		content >> hdr.Offset >> hdr.SizeInBytes;
-		files.push_back(hdr);
-	}
-
-	// unpack files those are in the vector
-	for (HDR hdr : files)
+void HDRPacker::PackObject()
+{
+	CheckHDR(xorstr("Object\\object.hdr"));
+	GetAllFiles("Object");
+	if (files.size() == 0)
+		return;
+	uint32 fCount = 0, nCount = 0, itr = 1;
+	m_hdr = ReadAllBytes(xorstr("Object\\object.hdr"), &m_hdrSize);
+	memcpy(&fCount, &m_hdr[0], 4);
+	FILE* fp = fopen(xorstr("Object\\object.hdr"), "r+b");
+	int startOffset = GetFileSize(string(xorstr("Object\\object.src")));
+	int SizeInBytes = 0;
+	for (KoFile file : files)
 	{
-		BYTE* buff = new BYTE[hdr.SizeInBytes+1];
+		Engine->SetState(string_format(xorstr("---> [%s]"), file.Name.c_str()));
+		Engine->SetPercent(round(itr * 100 / files.size()));
+		SizeInBytes = file.Size;
+		std::string origName = RemoveBasePath(file.Name);
+		DWORD find = FindPatternEx(m_hdr, m_hdrSize, origName);
+		if (find != NULL)
+		{
+			fseek(fp, find + origName.length(), SEEK_SET);
+			fwrite(&startOffset, 4, 1, fp);
+			fseek(fp, find + origName.length() + 4, SEEK_SET);
+			fwrite(&SizeInBytes, 4, 1, fp);
+		}
+		else {
+			size_t nameLen = origName.length();
+			char* name = (char*)malloc(sizeof(char) * nameLen);
 
-		fp = fopen("UI\\ui.src", "rb"); // open src file
-		fseek(fp, hdr.Offset, SEEK_SET); // goto offset
-		fread(&buff[0], sizeof(BYTE), (size_t)hdr.SizeInBytes, fp); // read the bytes from offset to size
-		fclose(fp); // close the file
-
-		ofstream file;
-		file.open(string("UI\\" + hdr.Name).c_str(), ios::out | ios::binary); // save the data which has been readed before, as file
-		file.write((const char*)buff, hdr.SizeInBytes);
-		file.close();
+			name = (char*)origName.c_str();
+			fseek(fp, 0, SEEK_END);
+			fwrite(&nameLen, 4, 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(name, sizeof(char), nameLen, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(&startOffset, sizeof(startOffset), 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(&SizeInBytes, sizeof(SizeInBytes), 1, fp);
+			nCount++;
+		}
+		std::ofstream src(xorstr("Object\\object.src"), ios::binary | ios::app);
+		std::ifstream _koFile(file.Name.c_str(), std::ios::binary);
+		src << _koFile.rdbuf();
+		src.close();
+		_koFile.close();
+		std::remove(file.Name.c_str());
+		startOffset += SizeInBytes;
+		itr++;
 	}
-	
+	if (nCount > 0)
+	{
+		fCount += nCount;
+		fseek(fp, 0x0, SEEK_SET);
+		fwrite(&fCount, 4, 1, fp);
+	}
+	fclose(fp);
+	files.clear();
+}
+
+void HDRPacker::PackItem()
+{
+	CheckHDR(xorstr("Item\\item.hdr"));
+	GetAllFiles("Item");
+	if (files.size() == 0)
+		return;
+	uint32 fCount = 0, nCount = 0, itr = 1;
+	m_hdr = ReadAllBytes(xorstr("Item\\item.hdr"), &m_hdrSize);
+	memcpy(&fCount, &m_hdr[0], 4);
+	FILE* fp = fopen(xorstr("Item\\item.hdr"), "r+b");
+	int startOffset = GetFileSize(string(xorstr("Item\\item.src")));
+	int SizeInBytes = 0;
+	for (KoFile file : files)
+	{
+		Engine->SetState(string_format(xorstr("---> [%s]"), file.Name.c_str()));
+		Engine->SetPercent(round(itr * 100 / files.size()));
+		SizeInBytes = file.Size;
+		std::string origName = RemoveBasePath(file.Name);
+		DWORD find = FindPatternEx(m_hdr, m_hdrSize, origName);
+		if (find != NULL)
+		{
+			fseek(fp, find + origName.length(), SEEK_SET);
+			fwrite(&startOffset, 4, 1, fp);
+			fseek(fp, find + origName.length() + 4, SEEK_SET);
+			fwrite(&SizeInBytes, 4, 1, fp);
+		}
+		else {
+			size_t nameLen = origName.length();
+			char* name = (char*)malloc(sizeof(char) * nameLen);
+
+			name = (char*)origName.c_str();
+			fseek(fp, 0, SEEK_END);
+			fwrite(&nameLen, 4, 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(name, sizeof(char), nameLen, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(&startOffset, sizeof(startOffset), 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(&SizeInBytes, sizeof(SizeInBytes), 1, fp);
+			nCount++;
+		}
+		std::ofstream src(xorstr("Item\\item.src"), ios::binary | ios::app);
+		std::ifstream _koFile(file.Name.c_str(), std::ios::binary);
+		src << _koFile.rdbuf();
+		src.close();
+		_koFile.close();
+		std::remove(file.Name.c_str());
+		startOffset += SizeInBytes;
+		itr++;
+	}
+	if (nCount > 0)
+	{
+		fCount += nCount;
+		fseek(fp, 0x0, SEEK_SET);
+		fwrite(&fCount, 4, 1, fp);
+	}
+	fclose(fp);
+	files.clear();
+}
+
+void HDRPacker::PackFX()
+{
+	CheckHDR(xorstr("FX\\fx.hdr"));
+	GetAllFiles("FX");
+	if (files.size() == 0)
+		return;
+	uint32 fCount = 0, nCount = 0, itr = 1;
+	m_hdr = ReadAllBytes(xorstr("FX\\fx.hdr"), &m_hdrSize);
+	memcpy(&fCount, &m_hdr[0], 4);
+	FILE* fp = fopen(xorstr("FX\\fx.hdr"), "r+b");
+	int startOffset = GetFileSize(string(xorstr("FX\\fx.src")));
+	int SizeInBytes = 0;
+	for (KoFile file : files)
+	{
+		Engine->SetState(string_format(xorstr("---> [%s]"), file.Name.c_str()));
+		Engine->SetPercent(round(itr * 100 / files.size()));
+		SizeInBytes = file.Size;
+		std::string origName = RemoveBasePath(file.Name);
+		DWORD find = FindPatternEx(m_hdr, m_hdrSize, origName);
+		if (find != NULL)
+		{
+			fseek(fp, find + origName.length(), SEEK_SET);
+			fwrite(&startOffset, 4, 1, fp);
+			fseek(fp, find + origName.length() + 4, SEEK_SET);
+			fwrite(&SizeInBytes, 4, 1, fp);
+		}
+		else {
+			size_t nameLen = origName.length();
+			char* name = (char*)malloc(sizeof(char) * nameLen);
+
+			name = (char*)origName.c_str();
+			fseek(fp, 0, SEEK_END);
+			fwrite(&nameLen, 4, 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(name, sizeof(char), nameLen, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(&startOffset, sizeof(startOffset), 1, fp);
+			fseek(fp, 0, SEEK_END);
+			fwrite(&SizeInBytes, sizeof(SizeInBytes), 1, fp);
+			nCount++;
+		}
+		std::ofstream src(xorstr("FX\\fx.src"), ios::binary | ios::app);
+		std::ifstream _koFile(file.Name.c_str(), std::ios::binary);
+		src << _koFile.rdbuf();
+		src.close();
+		_koFile.close();
+		std::remove(file.Name.c_str());
+		startOffset += SizeInBytes;
+		itr++;
+	}
+	if (nCount > 0)
+	{
+		fCount += nCount;
+		fseek(fp, 0x0, SEEK_SET);
+		fwrite(&fCount, 4, 1, fp);
+	}
+	fclose(fp);
+	files.clear();
 }
