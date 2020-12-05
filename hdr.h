@@ -3,7 +3,6 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "ByteBuffer.h"
 
 using namespace std;
 
@@ -27,10 +26,22 @@ struct KoFile
 
 class HDRPacker
 {
+protected:
+    char* m_hdr;
+    size_t m_hdrSize;
+    vector<KoFile> files;
+private:
+    char* ReadAllBytes(const char* filename, size_t* read);
+    DWORD FindPatternEx(char* mem, size_t size, std::string search);
+    void CheckHDR(std::string path);
+    bool GetAllFiles(const char* sDir);
+    uint32 GetFileSize(std::string filename);
 public:
-	HDRPacker();
-	~HDRPacker();
+    HDRPacker();
+    ~HDRPacker();
     void Pack();
-    void Unpack();
-    DWORD FindPattern(std::string name);
+    void PackObject();
+    void PackItem();
+    void PackFX();
+    std::string RemoveBasePath(const std::string& filename);
 };
