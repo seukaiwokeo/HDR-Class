@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        configuration: [Debug, Release]
+        configuration: [Release]
         platform: [x86]
 
     steps:
@@ -28,7 +28,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: build-${{matrix.configuration}}
-        path: ${{github.workspace}}/build/bin/${{ matrix.configuration == 'Debug' && 'debug' || 'release' }}
+        path: ${{github.workspace}}/build/bin/release
 
   release:
     needs: build
