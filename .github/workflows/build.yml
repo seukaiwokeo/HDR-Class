@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+        platform: [x86]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.configuration}} -A Win32
+    
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{matrix.configuration}} --parallel
+    
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{matrix.configuration}}
+        path: ${{github.workspace}}/build/bin/${{ matrix.configuration == 'Debug' && 'debug' || 'release' }} 

@@ -51,3 +51,14 @@ cmake --open .
 - Uses C++20 standard
 - Special configurations are set for MSVC compiler
 
+## Continuous Integration
+
+This project uses GitHub Actions for continuous integration. The build process is automatically triggered on:
+- Push to main branch
+- Pull requests to main branch
+
+The workflow builds both Debug and Release configurations for Windows x86 platform. Build artifacts are automatically uploaded and can be downloaded from the Actions tab in the GitHub repository.
+
+### Build Status
+[![Build](https://github.com/seukaiwokeo/hdr_class/actions/workflows/build.yml/badge.svg)](https://github.com/seukaiwokeo/hdr_class/actions/workflows/build.yml)
+
