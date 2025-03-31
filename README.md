@@ -57,10 +57,6 @@ cmake --open .
 - Project is configured for Windows 32-bit (x86) architecture
 - Uses C++20 standard
 - Special configurations are set for MSVC compiler
-
-## Continuous Integration
-
-This project uses GitHub Actions for continuous integration. The build process is automatically triggered on:
 - Push to main branch
 - Pull requests to main branch
 
