@@ -57,7 +57,3 @@ cmake --open .
 - Project is configured for Windows 32-bit (x86) architecture
 - Uses C++20 standard
 - Special configurations are set for MSVC compiler
-- Push to main branch
-- Pull requests to main branch
-
-The workflow builds both Debug and Release configurations for Windows x86 platform. Build artifacts are automatically uploaded and can be downloaded from the Actions tab in the GitHub repository.
