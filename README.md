@@ -1,11 +1,12 @@
+# hdr_class
+Knight Online C++ HDR Packing &amp; Unpacking
+
 ### Build Status
 [![Build](https://github.com/seukaiwokeo/hdr_class/actions/workflows/build.yml/badge.svg)](https://github.com/seukaiwokeo/hdr_class/actions/workflows/build.yml)
 
 ### Releases
 [![Releases](https://img.shields.io/github/v/release/seukaiwokeo/hdr_class)](https://github.com/seukaiwokeo/hdr_class/releases)
 
-# hdr_class
-Knight Online C++ HDR Packing &amp; Unpacking
 
 ## Usage
 	HDRPacker* packer = new HDRPacker();  
